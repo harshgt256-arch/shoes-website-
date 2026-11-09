@@ -1,0 +1,214 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Light Theme */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8f8f6;
+  --bg-elevated: #ffffff;
+  --text-primary: #0b0b0c;
+  --text-secondary: #3e3e3b;
+  --text-muted: #5e5e5a;
+  --accent-red: #a11a1f;
+  --accent-red-hover: #801216;
+  --accent-red-subtle: rgba(161, 26, 31, 0.08);
+  --border-subtle: #e6e6e2;
+  --border-strong: #0b0b0c;
+  --header-bg: rgba(255, 255, 255, 0.88);
+}
+
+.dark {
+  /* Dark Theme */
+  --bg-primary: #0a0a0b;
+  --bg-secondary: #131315;
+  --bg-elevated: #1a1a1d;
+  --text-primary: #f8f8f6;
+  --text-secondary: #b5b5b0;
+  --text-muted: #959590;
+  --accent-red: #b81d24;
+  --accent-red-hover: #d32830;
+  --accent-red-subtle: rgba(184, 29, 36, 0.18);
+  --border-subtle: #1f1f22;
+  --border-strong: #f8f8f6;
+  --header-bg: rgba(10, 10, 11, 0.88);
+}
+
+@layer base {
+  * {
+    border-color: var(--border-subtle);
+  }
+
+  html {
+    color-scheme: light dark;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: var(--font-body), sans-serif;
+    font-size: 14px;
+    letter-spacing: 0.02em;
+    line-height: 1.6;
+    overflow-x: clip;
+    min-height: 100vh;
+  }
+
+  ::selection {
+    background-color: var(--accent-red);
+    color: #ffffff;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-headline), serif;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    color: var(--text-primary);
+  }
+}
+
+/* Hero Wall Idle Float Animation */
+@keyframes heroShoeFloat {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.animate-idle-float {
+  animation: heroShoeFloat 4.6s ease-in-out infinite;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-slideInRight {
+  animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.35s ease-out forwards;
+}
+
+/* Glass Shelf Amber Glow Effect */
+.glass-shelf {
+  position: relative;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.03) 0%,
+    rgba(255, 255, 255, 0.22) 20%,
+    rgba(255, 255, 255, 0.32) 50%,
+    rgba(255, 255, 255, 0.22) 80%,
+    rgba(255, 255, 255, 0.03) 100%
+  );
+  box-shadow: 0 1px 0 0 rgba(255, 255, 255, 0.18) inset, 0 4px 12px rgba(0, 0, 0, 0.5);
+  transition: all 300ms ease;
+}
+
+.glass-shelf::after {
+  content: "";
+  position: absolute;
+  inset: -3px -10%;
+  border-radius: 9999px;
+  background: radial-gradient(ellipse at center, rgba(245, 158, 11, 0.85) 0%, rgba(217, 119, 6, 0.45) 50%, transparent 80%);
+  filter: blur(8px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 300ms ease;
+  z-index: -1;
+}
+
+.group:hover .glass-shelf,
+.group:focus-visible .glass-shelf {
+  background: linear-gradient(
+    90deg,
+    rgba(245, 158, 11, 0.2) 0%,
+    rgba(251, 191, 36, 0.7) 50%,
+    rgba(245, 158, 11, 0.2) 100%
+  );
+  box-shadow: 
+    0 0 14px 2px rgba(245, 158, 11, 0.8),
+    0 0 32px 6px rgba(245, 158, 11, 0.4),
+    0 1px 1px 0 rgba(255, 255, 255, 0.6) inset;
+}
+
+.group:hover .glass-shelf::after,
+.group:focus-visible .glass-shelf::after,
+.glass-shelf.shelf-amber-active::after {
+  opacity: 1;
+}
+
+.glass-shelf.shelf-amber-active {
+  background: linear-gradient(
+    90deg,
+    rgba(245, 158, 11, 0.2) 0%,
+    rgba(251, 191, 36, 0.7) 50%,
+    rgba(245, 158, 11, 0.2) 100%
+  ) !important;
+  box-shadow: 
+    0 0 14px 2px rgba(245, 158, 11, 0.8),
+    0 0 32px 6px rgba(245, 158, 11, 0.4),
+    0 1px 1px 0 rgba(255, 255, 255, 0.6) inset !important;
+}
+
+/* Lenis smooth scrolling defaults */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+.lenis.lenis-scrolling iframe {
+  pointer-events: none;
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  html:focus-within {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
