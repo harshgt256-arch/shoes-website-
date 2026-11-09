@@ -65,6 +65,7 @@ export function LenisProvider({ children }: { children: React.ReactNode }) {
     };
 
     lenis.on("scroll", handleScroll);
+    window.addEventListener("scroll", handleScroll, { passive: true });
 
     const tickerCallback = (time: number) => {
       lenis.raf(time * 1000);
@@ -76,6 +77,7 @@ export function LenisProvider({ children }: { children: React.ReactNode }) {
     return () => {
       motionQuery.removeEventListener("change", handleMotionChange);
       lenis.off("scroll", handleScroll);
+      window.removeEventListener("scroll", handleScroll);
       gsap.ticker.remove(tickerCallback);
       lenis.destroy();
       lenisRef.current = null;

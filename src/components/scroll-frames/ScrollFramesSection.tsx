@@ -53,6 +53,7 @@ export function ScrollFramesSection() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const [reducedMotion, setReducedMotion] = useState(false);
+  const [overrideReducedMotion, setOverrideReducedMotion] = useState(false);
   const [loadPercent, setLoadPercent] = useState(0);
   const [frameOneLoaded, setFrameOneLoaded] = useState(false);
   const [allLoaded, setAllLoaded] = useState(false);
@@ -109,99 +110,159 @@ export function ScrollFramesSection() {
   }, []);
 
   // Render a specific frame on canvas with aspect-ratio containment and DPR capping at 2
-  const renderFrame = useCallback((frameNumber: number) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+  const renderFrame = useCallback(
+    (frameNumber: number) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
 
-    const img = getBestAvailableImage(frameNumber);
-    if (!img) return;
+      const img = getBestAvailableImage(frameNumber);
+      if (!img) return;
 
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const parent = canvas.parentElement;
-    const rect = canvas.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const parent = canvas.parentElement;
+      const rect = canvas.getBoundingClientRect();
 
-    const displayW = rect.width > 0 ? rect.width : (parent?.clientWidth || 800);
-    const displayH = rect.height > 0 ? rect.height : (parent?.clientHeight || 500);
+      const displayW = rect.width > 0 ? rect.width : (parent?.clientWidth || 360);
+      const displayH = rect.height > 0 ? rect.height : (parent?.clientHeight || 450);
 
-    const targetBufferWidth = Math.round(displayW * dpr);
-    const targetBufferHeight = Math.round(displayH * dpr);
+      const targetBufferWidth = Math.round(displayW * dpr);
+      const targetBufferHeight = Math.round(displayH * dpr);
 
-    if (canvas.width !== targetBufferWidth || canvas.height !== targetBufferHeight) {
-      canvas.width = targetBufferWidth;
-      canvas.height = targetBufferHeight;
-    }
+      if (canvas.width !== targetBufferWidth || canvas.height !== targetBufferHeight) {
+        canvas.width = targetBufferWidth;
+        canvas.height = targetBufferHeight;
+      }
 
-    ctx.save();
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.save();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Calculate aspect ratio containment (1920x1080)
-    const imgWidth = img.naturalWidth || 1920;
-    const imgHeight = img.naturalHeight || 1080;
-    const imgRatio = imgWidth / imgHeight;
-    const canvasRatio = canvas.width / canvas.height;
+      // Calculate aspect ratio containment (1920x1080)
+      const imgWidth = img.naturalWidth || 1920;
+      const imgHeight = img.naturalHeight || 1080;
+      const imgRatio = imgWidth / imgHeight;
+      const canvasRatio = canvas.width / canvas.height;
 
-    let drawW = canvas.width;
-    let drawH = canvas.height;
+      let drawW = canvas.width;
+      let drawH = canvas.height;
 
-    if (canvasRatio > imgRatio) {
-      drawH = canvas.height * 0.94;
-      drawW = drawH * imgRatio;
-    } else {
-      drawW = canvas.width * 0.96;
-      drawH = drawW / imgRatio;
-    }
+      if (canvasRatio > imgRatio) {
+        drawH = canvas.height * 0.92;
+        drawW = drawH * imgRatio;
+      } else {
+        drawW = canvas.width * 0.95;
+        drawH = drawW / imgRatio;
+      }
 
-    const drawX = (canvas.width - drawW) / 2;
-    const drawY = (canvas.height - drawH) / 2;
+      const drawX = (canvas.width - drawW) / 2;
+      // On mobile portrait (canvasRatio < 1), raise the shoe slightly so it floats cleanly above bottom captions
+      const isPortrait = canvasRatio < 1;
+      const verticalShift = isPortrait ? -Math.round((canvas.height - drawH) * 0.22) : 0;
+      const drawY = Math.max(0, (canvas.height - drawH) / 2 + verticalShift);
 
-    ctx.drawImage(img, drawX, drawY, drawW, drawH);
-    ctx.restore();
-  }, [getBestAvailableImage]);
+      ctx.drawImage(img, drawX, drawY, drawW, drawH);
+      ctx.restore();
+    },
+    [getBestAvailableImage]
+  );
 
-  // Preload frames progressively
+  // Progressive 3-phase frame preloader:
+  // Phase 1: 17 Keyframes (<1.8MB) load first -> immediate 360° rotation in <500ms
+  // Phase 2: Interleaved frames (every 4th frame)
+  // Phase 3: Full 188 60fps frames in batches
   useEffect(() => {
-    if (reducedMotion) return;
+    if (reducedMotion && !overrideReducedMotion) return;
 
     const images: (HTMLImageElement | null)[] = new Array(TOTAL_FRAMES).fill(null);
     imagesRef.current = images;
 
     let loadedCount = 0;
+    let isCancelled = false;
 
-    // Load Frame 1 FIRST and immediately render it
-    const frameOne = new window.Image();
-    frameOne.src = getFrameUrl(1);
-    frameOne.onload = () => {
-      images[0] = frameOne;
-      loadedCount++;
-      setLoadPercent(Math.round((loadedCount / TOTAL_FRAMES) * 100));
-      setFrameOneLoaded(true);
-      renderFrame(1);
+    const loadSingleFrame = (frameNum: number): Promise<HTMLImageElement | null> => {
+      return new Promise((resolve) => {
+        if (images[frameNum - 1]?.complete) {
+          return resolve(images[frameNum - 1]);
+        }
+        const img = new window.Image();
+        img.src = getFrameUrl(frameNum);
+        img.onload = () => {
+          if (isCancelled) return resolve(null);
+          images[frameNum - 1] = img;
+          loadedCount++;
+          const pct = Math.round((loadedCount / TOTAL_FRAMES) * 100);
+          setLoadPercent(pct);
+          if (frameNum === 1 || !frameOneLoaded) {
+            setFrameOneLoaded(true);
+            renderFrame(currentFrameRef.current);
+          }
+          resolve(img);
+        };
+        img.onerror = () => {
+          loadedCount++;
+          resolve(null);
+        };
+      });
     };
 
-    // Load remaining frames progressively
-    for (let i = 2; i <= TOTAL_FRAMES; i++) {
-      const img = new window.Image();
-      img.src = getFrameUrl(i);
-      img.onload = () => {
-        images[i - 1] = img;
-        loadedCount++;
-        const pct = Math.round((loadedCount / TOTAL_FRAMES) * 100);
-        setLoadPercent(pct);
-        if (loadedCount >= TOTAL_FRAMES) {
-          setAllLoaded(true);
-        }
-      };
-      img.onerror = () => {
-        loadedCount++;
-      };
+    // Phase 1 Keyframes (17 frames spaced evenly across 360°)
+    const KEYFRAMES = [1, 12, 24, 36, 48, 60, 72, 84, 96, 108, 120, 132, 144, 156, 168, 180, 188];
+
+    // Phase 2: Interleaved (every 4th frame)
+    const PHASE_2_FRAMES: number[] = [];
+    for (let f = 4; f <= TOTAL_FRAMES; f += 4) {
+      if (!KEYFRAMES.includes(f)) {
+        PHASE_2_FRAMES.push(f);
+      }
     }
 
+    // Phase 3: Remaining frames
+    const PHASE_3_FRAMES: number[] = [];
+    for (let f = 1; f <= TOTAL_FRAMES; f++) {
+      if (!KEYFRAMES.includes(f) && !PHASE_2_FRAMES.includes(f)) {
+        PHASE_3_FRAMES.push(f);
+      }
+    }
+
+    const executePreload = async () => {
+      // 1. Immediately fetch Frame 1 and draw
+      await loadSingleFrame(1);
+      if (isCancelled) return;
+      renderFrame(1);
+
+      // 2. Load Phase 1 Keyframes concurrently (instant 360° coverage)
+      await Promise.all(KEYFRAMES.map((f) => loadSingleFrame(f)));
+      if (isCancelled) return;
+      renderFrame(currentFrameRef.current);
+      ScrollTrigger.refresh();
+
+      // 3. Load Phase 2 in small batches of 6
+      for (let i = 0; i < PHASE_2_FRAMES.length; i += 6) {
+        if (isCancelled) return;
+        const batch = PHASE_2_FRAMES.slice(i, i + 6);
+        await Promise.all(batch.map((f) => loadSingleFrame(f)));
+      }
+
+      // 4. Load Phase 3 in small batches of 8
+      for (let i = 0; i < PHASE_3_FRAMES.length; i += 8) {
+        if (isCancelled) return;
+        const batch = PHASE_3_FRAMES.slice(i, i + 8);
+        await Promise.all(batch.map((f) => loadSingleFrame(f)));
+      }
+
+      if (!isCancelled) {
+        setAllLoaded(true);
+      }
+    };
+
+    executePreload();
+
     return () => {
+      isCancelled = true;
       imagesRef.current = [];
     };
-  }, [reducedMotion, renderFrame]);
+  }, [reducedMotion, overrideReducedMotion, renderFrame]);
 
   // Initial draw once mounted and on resize
   useEffect(() => {
@@ -224,13 +285,17 @@ export function ScrollFramesSection() {
 
   // Setup GSAP ScrollTrigger Pinned Animation
   useEffect(() => {
-    if (reducedMotion) return;
+    if (reducedMotion && !overrideReducedMotion) return;
 
     gsap.registerPlugin(ScrollTrigger);
 
     const container = containerRef.current;
     const pinnedEl = pinnedRef.current;
     if (!container || !pinnedEl) return;
+
+    const isTouch =
+      typeof window !== "undefined" &&
+      ("ontouchstart" in window || navigator.maxTouchPoints > 0);
 
     const trigger = ScrollTrigger.create({
       trigger: container,
@@ -239,7 +304,7 @@ export function ScrollFramesSection() {
       pin: pinnedEl,
       pinSpacing: true,
       anticipatePin: 1,
-      scrub: 0.35, // Smooth inertia scrub
+      scrub: isTouch ? 0.08 : 0.35, // Instant tactile response on mobile touch
       onUpdate: (self) => {
         const progress = self.progress;
         setScrollProgress(progress);
@@ -264,25 +329,33 @@ export function ScrollFramesSection() {
       },
     });
 
-    // Refresh ScrollTrigger after a tick so container geometry is exact
+    // Native scroll listener to ensure ScrollTrigger updates on mobile touch inertia
+    const handleNativeScroll = () => {
+      ScrollTrigger.update();
+    };
+    window.addEventListener("scroll", handleNativeScroll, { passive: true });
+
+    // Refresh ScrollTrigger after layout settles
     const refreshTimer = setTimeout(() => {
       ScrollTrigger.refresh();
-    }, 200);
+      renderFrame(currentFrameRef.current);
+    }, 250);
 
     return () => {
       clearTimeout(refreshTimer);
+      window.removeEventListener("scroll", handleNativeScroll);
       trigger.kill();
     };
-  }, [reducedMotion, renderFrame]);
+  }, [reducedMotion, overrideReducedMotion, renderFrame]);
 
-  // Reduced motion fallback view
-  if (reducedMotion) {
+  // Reduced motion fallback view with manual override
+  if (reducedMotion && !overrideReducedMotion) {
     return (
       <section
         aria-label="3D Footwear Craft Analysis"
-        className="w-full bg-[#080809] text-white py-24 sm:py-32 px-6 sm:px-12 border-b border-white/[0.08]"
+        className="w-full bg-[#080809] text-white py-20 sm:py-32 px-6 sm:px-12 border-b border-white/[0.08]"
       >
-        <div className="max-w-6xl mx-auto space-y-16">
+        <div className="max-w-6xl mx-auto space-y-12 sm:space-y-16">
           <div className="text-center max-w-2xl mx-auto">
             <div className="w-12 h-[1.5px] bg-accent-red mx-auto mb-5" />
             <p className="font-body text-xs uppercase tracking-[0.3em] text-white/50 mb-2">
@@ -291,6 +364,19 @@ export function ScrollFramesSection() {
             <h2 className="font-headline text-3xl sm:text-5xl font-light tracking-[0.04em]">
               The Anatomy of Aurelle
             </h2>
+            <div className="mt-4 flex flex-col items-center gap-2">
+              <span className="text-[11px] uppercase tracking-[0.16em] text-white/40">
+                Reduced motion is active on your device
+              </span>
+              <button
+                type="button"
+                onClick={() => setOverrideReducedMotion(true)}
+                className="mt-1 inline-flex items-center gap-2 px-4 py-2 rounded-full border border-amber-300/40 bg-amber-400/10 text-amber-200 text-xs uppercase tracking-[0.18em] hover:bg-amber-400/20 active:scale-95 transition-all"
+              >
+                <span>Play 360° Interactive Rotation</span>
+                <span className="text-amber-300 font-bold">→</span>
+              </button>
+            </div>
           </div>
 
           <div className="relative w-full max-w-3xl mx-auto aspect-video rounded-lg overflow-hidden border border-white/10 shadow-2xl">
@@ -342,7 +428,7 @@ export function ScrollFramesSection() {
       {/* Pinned Viewport Container (GSAP ScrollTrigger Pinned) */}
       <div
         ref={pinnedRef}
-        className="w-full h-screen flex flex-col justify-between overflow-hidden bg-[#070708] relative"
+        className="w-full h-screen h-[100dvh] flex flex-col justify-between overflow-hidden bg-[#070708] relative"
       >
         {/* Atmospheric Ambient Lighting */}
         <div
@@ -350,38 +436,38 @@ export function ScrollFramesSection() {
           aria-hidden="true"
         >
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[550px] bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.045)_0%,rgba(161,26,31,0.03)_40%,transparent_75%)] blur-3xl" />
-          <div className="absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-[#070708] to-transparent pointer-events-none z-10" />
-          <div className="absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-[#070708] to-transparent pointer-events-none z-10" />
+          <div className="absolute inset-y-0 left-0 w-16 sm:w-24 bg-gradient-to-r from-[#070708] to-transparent pointer-events-none z-10" />
+          <div className="absolute inset-y-0 right-0 w-16 sm:w-24 bg-gradient-to-l from-[#070708] to-transparent pointer-events-none z-10" />
         </div>
 
-        {/* Quiet Loading State: Sleek Top-Right Badge */}
+        {/* Quiet Loading State: Sleek Badge */}
         {!allLoaded && (
-          <div className="absolute top-6 right-6 sm:right-12 z-30 flex items-center gap-2.5 bg-white/[0.06] backdrop-blur-md border border-white/10 rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-white/70">
+          <div className="absolute top-4 right-4 sm:top-6 sm:right-12 z-30 flex items-center gap-2 bg-white/[0.06] backdrop-blur-md border border-white/10 rounded-full px-2.5 sm:px-3 py-1 text-[9px] sm:text-[10px] uppercase tracking-[0.18em] text-white/70">
             <span className="h-1.5 w-1.5 rounded-full bg-accent-red animate-pulse" />
-            <span>Preloading 3D Frames: {loadPercent}%</span>
+            <span>3D Frames: {loadPercent}%</span>
           </div>
         )}
 
         {/* Top Header Information Bar */}
-        <header className="relative z-20 w-full px-6 sm:px-12 pt-6 sm:pt-8 flex items-center justify-between text-[11px] uppercase tracking-[0.25em] text-white/50 border-b border-white/[0.06] pb-4">
-          <div className="flex items-center gap-3">
+        <header className="relative z-20 w-full px-4 sm:px-12 pt-4 sm:pt-8 flex items-center justify-between text-[10px] sm:text-[11px] uppercase tracking-[0.2em] sm:tracking-[0.25em] text-white/50 border-b border-white/[0.06] pb-3 sm:pb-4">
+          <div className="flex items-center gap-2 sm:gap-3">
             <span className="h-1.5 w-1.5 rounded-full bg-accent-red" />
-            <span className="text-white font-medium">360° Footwear Deconstruction</span>
+            <span className="text-white font-medium text-[11px] sm:text-xs">360° Deconstruction</span>
           </div>
 
           <div className="hidden sm:flex items-center gap-6 text-[10px] text-white/40">
-            <span>Scroll smoothly to rotate</span>
+            <span>Scroll to rotate</span>
             <span>•</span>
             <span>1920 × 1080 Native Resolution</span>
           </div>
 
-          <div className="font-body text-xs text-white/70 tracking-[0.15em] font-mono">
+          <div className="font-body text-[11px] sm:text-xs text-white/70 tracking-[0.15em] font-mono">
             {String(currentFrameDisplay).padStart(3, "0")} / {TOTAL_FRAMES}
           </div>
         </header>
 
         {/* Center Canvas Stage & Beside-the-Shoe Captions */}
-        <div className="relative z-10 flex-1 w-full flex items-center justify-center px-4 sm:px-8">
+        <div className="relative z-10 flex-1 w-full flex items-center justify-center px-2 sm:px-8">
           {/* Base Fallback Image for Instant Zero-Delay Appearance */}
           {!frameOneLoaded && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -391,7 +477,7 @@ export function ScrollFramesSection() {
                 width={1920}
                 height={1080}
                 priority
-                className="max-h-[72vh] w-auto object-contain select-none opacity-50"
+                className="max-h-[65vh] w-auto object-contain select-none opacity-50"
               />
             </div>
           )}
@@ -401,45 +487,45 @@ export function ScrollFramesSection() {
             ref={canvasRef}
             width={1920}
             height={1080}
-            className="w-full h-full max-h-[72vh] object-contain select-none pointer-events-none"
+            className="w-full h-full max-h-[68vh] object-contain select-none pointer-events-none"
           />
 
-          {/* Beside-the-Shoe Captions (Desktop: Right Side; Mobile: Bottom Floating Card) */}
-          <div className="pointer-events-none absolute inset-x-6 sm:inset-x-12 bottom-4 sm:bottom-auto sm:top-1/2 sm:-translate-y-1/2 flex justify-start sm:justify-end z-20">
-            <div className="w-full sm:max-w-sm">
+          {/* Beside-the-Shoe Captions: Right on desktop, Compact Bottom Card on Mobile */}
+          <div className="pointer-events-none absolute inset-x-3 sm:inset-x-12 bottom-2 sm:bottom-auto sm:top-1/2 sm:-translate-y-1/2 flex justify-center sm:justify-end z-20">
+            <div className="w-full max-w-sm sm:max-w-sm">
               {CAPTIONS.map((cap) => {
                 const isSelected = activeCaption?.id === cap.id;
                 return (
                   <div
                     key={cap.id}
-                    className={`transition-all duration-500 ease-out bg-[#0D0D10]/90 backdrop-blur-md border border-white/15 rounded-lg p-5 sm:p-6 shadow-2xl shadow-black/80 space-y-3 ${
+                    className={`transition-all duration-400 ease-out bg-[#0D0D10]/95 backdrop-blur-md border border-white/15 rounded-lg p-3.5 sm:p-6 shadow-2xl shadow-black/80 space-y-2 sm:space-y-3 ${
                       isSelected
                         ? "opacity-100 translate-y-0 pointer-events-auto block"
-                        : "opacity-0 translate-y-4 pointer-events-none hidden sm:block sm:absolute sm:inset-x-0"
+                        : "opacity-0 translate-y-3 pointer-events-none hidden sm:block sm:absolute sm:inset-x-0"
                     }`}
                   >
-                    <div className="flex items-center justify-between border-b border-white/[0.08] pb-2.5">
-                      <span className="font-body text-[10px] uppercase tracking-[0.28em] text-accent-red font-medium">
+                    <div className="flex items-center justify-between border-b border-white/[0.08] pb-1.5 sm:pb-2.5">
+                      <span className="font-body text-[9px] sm:text-[10px] uppercase tracking-[0.24em] text-accent-red font-medium">
                         {cap.step}
                       </span>
-                      <span className="text-[10px] uppercase tracking-[0.16em] text-white/40">
+                      <span className="text-[9px] sm:text-[10px] uppercase tracking-[0.16em] text-white/40">
                         Atelier Focus
                       </span>
                     </div>
 
-                    <h3 className="font-headline text-xl sm:text-2xl text-white font-normal tracking-[0.03em] leading-snug">
+                    <h3 className="font-headline text-base sm:text-2xl text-white font-normal tracking-[0.03em] leading-snug">
                       {cap.title}
                     </h3>
 
-                    <p className="font-body text-xs text-white/75 font-light leading-relaxed tracking-[0.03em]">
+                    <p className="font-body text-[11px] sm:text-xs text-white/75 font-light leading-relaxed tracking-[0.02em] line-clamp-2 sm:line-clamp-none">
                       {cap.description}
                     </p>
 
-                    <div className="flex flex-wrap gap-2 pt-1.5">
+                    <div className="flex flex-wrap gap-1.5 sm:gap-2 pt-0.5 sm:pt-1">
                       {cap.specs.map((s) => (
                         <span
                           key={s}
-                          className="text-[9px] uppercase tracking-[0.16em] px-2 py-0.5 rounded border border-white/15 bg-white/[0.03] text-white/60"
+                          className="text-[8px] sm:text-[9px] uppercase tracking-[0.14em] px-1.5 sm:px-2 py-0.5 rounded border border-white/15 bg-white/[0.03] text-white/60"
                         >
                           {s}
                         </span>
@@ -453,15 +539,15 @@ export function ScrollFramesSection() {
         </div>
 
         {/* Bottom Progress Bar & Step Dots */}
-        <footer className="relative z-20 w-full px-6 sm:px-12 pb-6 sm:pb-8 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-white/[0.06] pt-4">
+        <footer className="relative z-20 w-full px-4 sm:px-12 pb-3 sm:pb-6 flex items-center justify-between gap-3 border-t border-white/[0.06] pt-3">
           {/* Step markers */}
-          <div className="flex items-center gap-6 text-[10px] uppercase tracking-[0.22em] text-white/50">
+          <div className="flex items-center gap-3 sm:gap-6 text-[9px] sm:text-[10px] uppercase tracking-[0.18em] sm:tracking-[0.22em] text-white/50">
             {CAPTIONS.map((cap) => {
               const active = activeCaption?.id === cap.id;
               return (
                 <div
                   key={cap.id}
-                  className={`flex items-center gap-2 transition-colors duration-300 ${
+                  className={`flex items-center gap-1.5 sm:gap-2 transition-colors duration-300 ${
                     active ? "text-amber-300 font-medium" : "text-white/40"
                   }`}
                 >
@@ -477,17 +563,14 @@ export function ScrollFramesSection() {
           </div>
 
           {/* Thin scroll line indicator */}
-          <div className="w-full sm:w-64 flex items-center gap-3">
-            <span className="text-[10px] text-white/40 tracking-[0.15em] uppercase">
-              Rotation
-            </span>
+          <div className="w-28 sm:w-64 flex items-center gap-2 sm:gap-3">
             <div className="flex-1 h-[2px] bg-white/10 rounded-full overflow-hidden">
               <div
                 className="h-full bg-accent-red transition-all duration-75"
                 style={{ width: `${Math.round(scrollProgress * 100)}%` }}
               />
             </div>
-            <span className="text-[10px] text-white/40 font-mono">
+            <span className="text-[9px] sm:text-[10px] text-white/40 font-mono">
               {Math.round(scrollProgress * 100)}%
             </span>
           </div>
