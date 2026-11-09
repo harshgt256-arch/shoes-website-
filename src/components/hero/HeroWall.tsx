@@ -6,6 +6,7 @@ import gsap from "gsap";
 import { SHOES, ShoeProduct } from "@/data/shoes";
 import { formatINR } from "@/config/brand";
 import { ShoeDetailPanel } from "./ShoeDetailPanel";
+import { ShoeDetailModal } from "@/components/collection/ShoeDetailModal";
 import { ArrowUpRight } from "lucide-react";
 
 export function HeroWall() {
@@ -13,9 +14,20 @@ export function HeroWall() {
   const [selectedShoe, setSelectedShoe] = useState<ShoeProduct | null>(null);
   const [isZoomed, setIsZoomed] = useState<boolean>(false);
   const [isAnimating, setIsAnimating] = useState<boolean>(false);
+  const [isMobile, setIsMobile] = useState<boolean>(false);
 
   const selectedShoeRef = useRef<ShoeProduct | null>(null);
   selectedShoeRef.current = selectedShoe;
+
+  // Track viewport width for hybrid desktop/mobile experience
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 1024);
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   // DOM Refs
   const sectionRef = useRef<HTMLElement | null>(null);
@@ -37,7 +49,7 @@ export function HeroWall() {
     return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   }, []);
 
-  // Zoom In Function
+  // Desktop In-Place Zoom In Function
   const zoomIn = useCallback((shoe: ShoeProduct) => {
     if (isAnimating) return;
     const shoeIndex = SHOES.findIndex((s) => s.id === shoe.id);
@@ -52,7 +64,7 @@ export function HeroWall() {
     setIsZoomed(true);
 
     const isReduced = checkReducedMotion();
-    const duration = isReduced ? 0.01 : 0.9; // 900ms
+    const duration = isReduced ? 0.01 : 0.85;
 
     // Ensure viewing area and detail panel containers are visible for layout
     if (detailPanelContainerRef.current) {
@@ -176,7 +188,7 @@ export function HeroWall() {
     }
   }, [checkReducedMotion, isAnimating]);
 
-  // Zoom Out Function
+  // Desktop In-Place Zoom Out Function
   const zoomOut = useCallback(() => {
     if (isAnimating || !selectedShoeRef.current) return;
     const currentShoe = selectedShoeRef.current;
@@ -188,7 +200,7 @@ export function HeroWall() {
 
     setIsAnimating(true);
     const isReduced = checkReducedMotion();
-    const duration = isReduced ? 0.01 : 0.9; // 900ms
+    const duration = isReduced ? 0.01 : 0.85;
 
     if (detailPanelContainerRef.current) {
       detailPanelContainerRef.current.style.pointerEvents = "none";
@@ -253,18 +265,18 @@ export function HeroWall() {
       0
     );
 
-    // 3. Restore all other shoes
+    // 3. Restore other shoes
     tl.to(
       otherItems,
       {
         opacity: 1,
         filter: "blur(0px)",
         scale: 1,
-        duration: duration * 0.95,
+        duration: duration * 0.9,
         ease: "power3.inOut",
         pointerEvents: "auto",
       },
-      duration * 0.1
+      0.1
     );
 
     // 4. Restore headline and footnote
@@ -274,10 +286,10 @@ export function HeroWall() {
         {
           opacity: 1,
           y: 0,
-          duration: duration * 0.7,
+          duration: duration * 0.6,
           ease: "power2.out",
         },
-        duration * 0.2
+        0.2
       );
     }
     if (footnoteRef.current) {
@@ -285,98 +297,90 @@ export function HeroWall() {
         footnoteRef.current,
         {
           opacity: 1,
-          duration: duration * 0.6,
+          duration: duration * 0.5,
           ease: "power2.out",
         },
-        duration * 0.3
+        0.2
       );
     }
   }, [checkReducedMotion, isAnimating]);
 
-  // Pan to another shoe while remaining zoomed
+  // Desktop Pan to next/prev shoe
   const panToShoe = useCallback(
-    (nextShoe: ShoeProduct, direction: "next" | "prev" = "next") => {
+    (nextShoe: ShoeProduct, direction: "next" | "prev") => {
       if (isAnimating || !selectedShoeRef.current) return;
-      const oldIndex = SHOES.findIndex((s) => s.id === selectedShoeRef.current?.id);
-      const newIndex = SHOES.findIndex((s) => s.id === nextShoe.id);
-      if (oldIndex === -1 || newIndex === -1) return;
+      const prevShoe = selectedShoeRef.current;
+      if (prevShoe.id === nextShoe.id) return;
 
-      const oldCard = shoeCardRefs.current[oldIndex];
-      const newCard = shoeCardRefs.current[newIndex];
+      const prevIndex = SHOES.findIndex((s) => s.id === prevShoe.id);
+      const nextIndex = SHOES.findIndex((s) => s.id === nextShoe.id);
+      if (prevIndex === -1 || nextIndex === -1) return;
+
       const viewingArea = viewingAreaRef.current;
-      if (!oldCard || !newCard || !viewingArea) return;
+      const prevCard = shoeCardRefs.current[prevIndex];
+      const newCard = shoeCardRefs.current[nextIndex];
+      const prevItem = shoeItemRefs.current[prevIndex];
+      const newItem = shoeItemRefs.current[nextIndex];
+      const prevShelf = shoeShelfRefs.current[prevIndex];
+      const newShelf = shoeShelfRefs.current[nextIndex];
+      const prevImage = shoeImageRefs.current[prevIndex];
+      const newImage = shoeImageRefs.current[nextIndex];
+
+      if (!viewingArea || !prevCard || !newCard) return;
 
       setIsAnimating(true);
+      setSelectedShoe(nextShoe);
+
       const isReduced = checkReducedMotion();
-
-      // Update URL hash
-      window.location.hash = nextShoe.id;
-
-      if (isReduced) {
-        // Immediate switch for reduced motion
-        const oldShelf = shoeShelfRefs.current[oldIndex];
-        const newShelf = shoeShelfRefs.current[newIndex];
-        if (oldShelf) oldShelf.classList.remove("shelf-amber-active");
-        if (newShelf) newShelf.classList.add("shelf-amber-active");
-
-        const oldItem = shoeItemRefs.current[oldIndex];
-        const newItem = shoeItemRefs.current[newIndex];
-        if (oldItem) oldItem.style.zIndex = "";
-        if (newItem) newItem.style.zIndex = "45";
-
-        gsap.set(oldCard, { x: 0, y: 0, scale: 1 });
-        const viewingRect = viewingArea.getBoundingClientRect();
-        const newRect = newCard.getBoundingClientRect();
-        const deltaX = viewingRect.left + viewingRect.width / 2 - (newRect.left + newRect.width / 2);
-        const deltaY = viewingRect.top + viewingRect.height / 2 - (newRect.top + newRect.height / 2);
-        const targetScale = Math.min(Math.max((viewingRect.width * 0.72) / newRect.width, 1.5), 2.4);
-        gsap.set(newCard, { x: deltaX, y: deltaY, scale: targetScale });
-
-        setSelectedShoe(nextShoe);
-        setIsAnimating(false);
-        return;
-      }
-
-      // Pan animation with light motion blur
+      const duration = isReduced ? 0.01 : 0.65;
       const isForward = direction === "next";
-      const oldImage = shoeImageRefs.current[oldIndex];
-      const newImage = shoeImageRefs.current[newIndex];
-      const oldShelf = shoeShelfRefs.current[oldIndex];
-      const newShelf = shoeShelfRefs.current[newIndex];
 
       const viewingRect = viewingArea.getBoundingClientRect();
-      const newRect = newCard.getBoundingClientRect();
-      const deltaX = viewingRect.left + viewingRect.width / 2 - (newRect.left + newRect.width / 2);
-      const deltaY = viewingRect.top + viewingRect.height / 2 - (newRect.top + newRect.height / 2);
-      const targetScale = Math.min(Math.max((viewingRect.width * 0.72) / newRect.width, 1.5), 2.4);
+      const newShoeRect = newCard.getBoundingClientRect();
 
-      const oldItem = shoeItemRefs.current[oldIndex];
-      const newItem = shoeItemRefs.current[newIndex];
+      const targetCenterX = viewingRect.left + viewingRect.width / 2;
+      const targetCenterY = viewingRect.top + viewingRect.height / 2;
+      const currentCenterX = newShoeRect.left + newShoeRect.width / 2;
+      const currentCenterY = newShoeRect.top + newShoeRect.height / 2;
+
+      const deltaX = targetCenterX - currentCenterX;
+      const deltaY = targetCenterY - currentCenterY;
+
+      const availableWidth = Math.min(viewingRect.width * 0.72, 420);
+      const targetScale = Math.min(Math.max(availableWidth / newShoeRect.width, 1.5), 2.4);
 
       const tl = gsap.timeline({
         onComplete: () => {
-          if (oldShelf) oldShelf.classList.remove("shelf-amber-active");
-          if (oldItem) oldItem.style.zIndex = "";
-          gsap.set(oldCard, { x: 0, y: 0, scale: 1 });
-          if (oldImage) gsap.set(oldImage, { x: 0, filter: "blur(0px)", opacity: 1 });
-
-          setSelectedShoe(nextShoe);
           setIsAnimating(false);
+          if (window.location.hash !== `#${nextShoe.id}`) {
+            window.location.hash = nextShoe.id;
+          }
         },
       });
 
-      // 1. Pan current shoe sideways with light motion blur
-      if (oldImage) {
-        tl.to(oldImage, {
-          x: isForward ? -75 : 75,
-          filter: "blur(8px)",
-          opacity: 0.15,
-          duration: 0.32,
-          ease: "power2.in",
-        });
+      if (prevImage) {
+        tl.to(
+          prevImage,
+          {
+            x: isForward ? -75 : 75,
+            filter: "blur(8px)",
+            opacity: 0.15,
+            duration: duration * 0.45,
+            ease: "power2.in",
+            onComplete: () => {
+              gsap.set(prevCard, { x: 0, y: 0, scale: 1 });
+              gsap.set(prevImage, { x: 0, filter: "blur(0px)", opacity: 1 });
+              if (prevItem) {
+                prevItem.style.zIndex = "";
+                gsap.set(prevItem, { opacity: 0, filter: "blur(12px)", scale: 0.96 });
+              }
+              if (prevShelf) prevShelf.classList.remove("shelf-amber-active");
+            },
+          },
+          0
+        );
       }
 
-      // 2. Position new shoe directly at viewing area and bring in from opposite side
       tl.add(() => {
         if (newItem) newItem.style.zIndex = "45";
         if (newShelf) newShelf.classList.add("shelf-amber-active");
@@ -403,13 +407,20 @@ export function HeroWall() {
     [checkReducedMotion, isAnimating]
   );
 
-  // Handle URL hash & back/forward button
+  // Handle URL hash & browser back/forward buttons
   useEffect(() => {
     const handleHash = () => {
       const hash = window.location.hash.replace("#", "").trim();
+      const mobile = window.innerWidth < 1024;
+
       if (!hash) {
         if (selectedShoeRef.current) {
-          zoomOut();
+          if (mobile) {
+            setSelectedShoe(null);
+            setIsZoomed(false);
+          } else {
+            zoomOut();
+          }
         }
         return;
       }
@@ -417,15 +428,19 @@ export function HeroWall() {
       const match = SHOES.find((s) => s.id === hash || s.slug === hash);
       if (match) {
         if (selectedShoeRef.current?.id === match.id) return;
-        if (selectedShoeRef.current) {
-          panToShoe(match, "next");
+        if (mobile) {
+          setSelectedShoe(match);
+          setIsZoomed(true);
         } else {
-          zoomIn(match);
+          if (selectedShoeRef.current) {
+            panToShoe(match, "next");
+          } else {
+            zoomIn(match);
+          }
         }
       }
     };
 
-    // Check initial hash after mount
     const timer = setTimeout(handleHash, 250);
     window.addEventListener("popstate", handleHash);
     window.addEventListener("hashchange", handleHash);
@@ -442,7 +457,15 @@ export function HeroWall() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && selectedShoeRef.current) {
         e.preventDefault();
-        zoomOut();
+        if (window.innerWidth < 1024) {
+          setSelectedShoe(null);
+          setIsZoomed(false);
+          if (window.location.hash) {
+            history.pushState(null, "", window.location.pathname + window.location.search);
+          }
+        } else {
+          zoomOut();
+        }
       }
     };
 
@@ -450,10 +473,18 @@ export function HeroWall() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [zoomOut]);
 
-  // Click on shoe item
+  // Handle Shoe Click
   const handleShoeClick = (shoe: ShoeProduct) => {
+    // On Mobile/Tablet (< 1024px): Open Full-Screen Atelier Inspection Modal
+    if (isMobile) {
+      setSelectedShoe(shoe);
+      setIsZoomed(true);
+      window.location.hash = shoe.id;
+      return;
+    }
+
+    // On Desktop (>= 1024px): Cinematic in-place zoom
     if (isZoomed && selectedShoe?.id === shoe.id) {
-      // "Clicking the shoe again zooms out"
       zoomOut();
     } else if (!isZoomed) {
       zoomIn(shoe);
@@ -482,16 +513,9 @@ export function HeroWall() {
     >
       {/* Gallery Wall Lighting & Atmospheric Spotlights */}
       <div className="pointer-events-none absolute inset-0 z-0" aria-hidden="true">
-        {/* Overhead primary spotlight */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1100px] h-[550px] bg-[radial-gradient(ellipse_at_top,rgba(255,255,255,0.08)_0%,rgba(245,158,11,0.03)_40%,transparent_75%)] blur-2xl" />
-
-        {/* Ambient spotlight for Upper Tier (Row 1) */}
         <div className="hidden md:block absolute top-[36%] left-1/2 -translate-x-1/2 w-[1300px] h-[260px] bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.035)_0%,rgba(245,158,11,0.02)_50%,transparent_80%)] blur-xl" />
-
-        {/* Ambient spotlight for Lower Tier (Row 2) */}
         <div className="hidden md:block absolute top-[68%] left-1/2 -translate-x-1/2 w-[1300px] h-[260px] bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.035)_0%,rgba(245,158,11,0.02)_50%,transparent_80%)] blur-xl" />
-
-        {/* Subtle architectural wall vertical vignette */}
         <div className="absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-[#080809] to-transparent opacity-80" />
         <div className="absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-[#080809] to-transparent opacity-80" />
       </div>
@@ -512,35 +536,37 @@ export function HeroWall() {
           </p>
         </div>
 
-        {/* Viewing Target Stage & Right Detail Container (Used during Zoom-In) */}
-        <div
-          className={`absolute inset-x-3 sm:inset-x-8 lg:inset-x-12 top-2 sm:top-6 bottom-2 sm:bottom-6 z-30 pointer-events-none flex flex-col lg:flex-row items-center justify-between transition-opacity duration-300 overflow-y-auto lg:overflow-visible ${
-            isZoomed ? "opacity-100" : "opacity-0"
-          }`}
-        >
-          {/* Exact Viewing Area for Centering the Chosen Shoe (Left ~60% on desktop) */}
+        {/* Desktop Viewing Target Stage & Right Detail Container (Desktop >= 1024px) */}
+        {!isMobile && (
           <div
-            ref={viewingAreaRef}
-            className="w-full lg:w-[60%] h-[42vh] lg:h-full flex items-center justify-center relative pointer-events-none"
-          />
-
-          {/* Right Detail Panel Container */}
-          <div
-            ref={detailPanelContainerRef}
-            className="w-full lg:w-[40%] flex items-center justify-center lg:justify-end py-2 pointer-events-none opacity-0"
+            className={`hidden lg:flex absolute inset-x-8 lg:inset-x-12 top-6 bottom-6 z-30 pointer-events-none items-center justify-between transition-opacity duration-300 ${
+              isZoomed ? "opacity-100" : "opacity-0"
+            }`}
           >
-            {selectedShoe && (
-              <ShoeDetailPanel
-                shoe={selectedShoe}
-                currentIndex={currentIndex}
-                totalShoes={SHOES.length}
-                onPrev={handlePrev}
-                onNext={handleNext}
-                onClose={zoomOut}
-              />
-            )}
+            {/* Centered Viewing Area for Chosen Shoe (Left ~60%) */}
+            <div
+              ref={viewingAreaRef}
+              className="w-[60%] h-full flex items-center justify-center relative pointer-events-none"
+            />
+
+            {/* Right Detail Panel Container (Right ~40%) */}
+            <div
+              ref={detailPanelContainerRef}
+              className="w-[40%] flex items-center justify-end py-2 pointer-events-none opacity-0"
+            >
+              {selectedShoe && (
+                <ShoeDetailPanel
+                  shoe={selectedShoe}
+                  currentIndex={currentIndex}
+                  totalShoes={SHOES.length}
+                  onPrev={handlePrev}
+                  onNext={handleNext}
+                  onClose={zoomOut}
+                />
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* The 10-Shoe Gallery Wall: 2 rows of 5 on desktop, 2 columns on mobile */}
         <div
@@ -550,7 +576,7 @@ export function HeroWall() {
           {SHOES.map((shoe, index) => {
             const floatDelay = `${((index % 5) * 0.85 + (index >= 5 ? 0.42 : 0)).toFixed(2)}s`;
             const isHovered = activeHoverId === shoe.id;
-            const isCurrentSelected = selectedShoe?.id === shoe.id;
+            const isCurrentSelected = !isMobile && selectedShoe?.id === shoe.id;
 
             return (
               <div
@@ -560,7 +586,7 @@ export function HeroWall() {
                 }}
                 className="group relative flex flex-col items-center justify-end"
               >
-                {/* Shoe Card Wrapper (Transformed with GSAP on Zoom) */}
+                {/* Shoe Card Wrapper */}
                 <div
                   ref={(el) => {
                     shoeCardRefs.current[index] = el;
@@ -581,22 +607,21 @@ export function HeroWall() {
                           : ""
                       }`}
                     >
-                      {/* Idle float layer (disabled when zoomed to maintain exact center) */}
+                      {/* Staggered Idle Float */}
                       <div
                         className={`w-full h-full flex items-end justify-center ${
-                          !isZoomed ? "animate-idle-float" : ""
+                          !isZoomed ? "animate-heroShoeFloat" : ""
                         }`}
                         style={{
                           animationDelay: floatDelay,
-                          animationDuration: "4.8s",
+                          animationDuration: "6.5s",
                         }}
                       >
-                        {/* Shoe Image Container (Pan with motion blur during prev/next) */}
                         <div
                           ref={(el) => {
                             shoeImageRefs.current[index] = el;
                           }}
-                          className="relative w-full h-full flex items-end justify-center will-change-transform"
+                          className="relative flex items-end justify-center"
                         >
                           <Image
                             src={shoe.image}
@@ -612,10 +637,10 @@ export function HeroWall() {
                       </div>
                     </div>
 
-                    {/* "Click to inspect" Tooltip (only when wall is not zoomed) */}
+                    {/* "Click to inspect" Tooltip on Desktop */}
                     {!isZoomed && (
                       <div
-                        className={`pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1 whitespace-nowrap rounded-full bg-white/10 backdrop-blur-md px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-amber-200 border border-amber-300/30 shadow-lg shadow-black/40 transition-all duration-300 ${
+                        className={`hidden lg:flex pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 z-30 items-center gap-1 whitespace-nowrap rounded-full bg-white/10 backdrop-blur-md px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-amber-200 border border-amber-300/30 shadow-lg shadow-black/40 transition-all duration-300 ${
                           isHovered ? "opacity-100 translate-y-0" : "opacity-0 translate-y-1"
                         }`}
                       >
@@ -644,9 +669,9 @@ export function HeroWall() {
                   onBlur={() => setActiveHoverId(null)}
                   onMouseEnter={() => setActiveHoverId(shoe.id)}
                   onMouseLeave={() => setActiveHoverId(null)}
-                  disabled={isZoomed && !isCurrentSelected}
+                  disabled={!isMobile && isZoomed && !isCurrentSelected}
                   className={`w-full text-center px-1 space-y-1 focus:outline-none focus-visible:ring-1 focus-visible:ring-amber-400/80 rounded-sm p-1 transition-opacity duration-300 ${
-                    isZoomed ? "opacity-0 pointer-events-none" : "opacity-100"
+                    !isMobile && isZoomed ? "opacity-0 pointer-events-none" : "opacity-100"
                   }`}
                   aria-label={`Inspect ${shoe.name}, in ${shoe.colour}. Price: ${formatINR(shoe.price)}`}
                 >
@@ -675,6 +700,28 @@ export function HeroWall() {
           <span>Prices inclusive of 18% GST</span>
         </div>
       </div>
+
+      {/* Mobile Fullscreen Atelier Inspection Modal (< 1024px) */}
+      {isMobile && selectedShoe && (
+        <ShoeDetailModal
+          shoe={selectedShoe}
+          onClose={() => {
+            setSelectedShoe(null);
+            setIsZoomed(false);
+            if (window.location.hash) {
+              history.pushState(
+                null,
+                "",
+                window.location.pathname + window.location.search
+              );
+            }
+          }}
+          onSelectShoe={(next) => {
+            setSelectedShoe(next);
+            window.location.hash = next.id;
+          }}
+        />
+      )}
     </section>
   );
 }
