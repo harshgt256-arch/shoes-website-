@@ -20,29 +20,26 @@ interface CaptionData {
 const CAPTIONS: CaptionData[] = [
   {
     id: "upper",
-    step: "01 / ARCHITECTURE",
+    step: "I · ARCHITECTURE",
     title: "Full-Grain Boxcalf Upper",
-    description:
-      "Hand-selected European calfskin, drum-dyed in organic vegetable extracts. Cut against the natural grain for perpetual structural integrity and deep patina.",
-    specs: ["1.6mm substance", "Vegetable-tanned", "Hand-burnished bevel"],
+    description: "1.6mm European calfskin drum-dyed in organic vegetable extracts. Cut against the grain for lifelong shape retention.",
+    specs: ["1.6mm European Boxcalf", "Vegetable-Tanned", "Hand-Burnished Bevel"],
     range: [0.12, 0.38],
   },
   {
     id: "lining",
-    step: "02 / ANATOMY",
+    step: "II · ANATOMY",
     title: "Glove-Soft Calfskin Lining",
-    description:
-      "Zero synthetic backing. An uncompromised, unbroken layer of glove leather breathes naturally in subtropical climates and molds to the unique contours of your foot.",
-    specs: ["100% breathable calf", "Cork filler bed", "Antimicrobial insole"],
+    description: "Zero synthetic backing. An unbroken layer of breathable glove leather that molds to your foot.",
+    specs: ["100% Breathable Calf", "Natural Cork Filler", "Antimicrobial Bed"],
     range: [0.42, 0.68],
   },
   {
     id: "sole",
-    step: "03 / FOUNDATION",
+    step: "III · FOUNDATION",
     title: "Goodyear-Welted Sculpted Sole",
-    description:
-      "Double oak-bark tanned leather outsole channeled by hand and reinforced with vulcanised natural rubber grips. Engineered to be indefinitely resoled.",
-    specs: ["360° Goodyear welt", "Recessed stitch channel", "Resoleable for life"],
+    description: "Double oak-bark tanned leather outsole channeled by hand with recessed stitch channel.",
+    specs: ["360° Goodyear Welt", "Recessed Stitching", "Indefinitely Resoleable"],
     range: [0.72, 0.96],
   },
 ];
@@ -148,7 +145,7 @@ export function ScrollFramesSection() {
       let drawH = canvas.height;
 
       if (canvasRatio > imgRatio) {
-        drawH = canvas.height * 0.92;
+        drawH = canvas.height * 0.90;
         drawW = drawH * imgRatio;
       } else {
         drawW = canvas.width * 0.95;
@@ -156,9 +153,9 @@ export function ScrollFramesSection() {
       }
 
       const drawX = (canvas.width - drawW) / 2;
-      // On mobile portrait (canvasRatio < 1), raise the shoe slightly so it floats cleanly above bottom captions
+      // On mobile portrait, gently shift shoe upward so floating text sits cleanly below
       const isPortrait = canvasRatio < 1;
-      const verticalShift = isPortrait ? -Math.round((canvas.height - drawH) * 0.22) : 0;
+      const verticalShift = isPortrait ? -Math.round((canvas.height - drawH) * 0.16) : 0;
       const drawY = Math.max(0, (canvas.height - drawH) / 2 + verticalShift);
 
       ctx.drawImage(img, drawX, drawY, drawW, drawH);
@@ -167,10 +164,7 @@ export function ScrollFramesSection() {
     [getBestAvailableImage]
   );
 
-  // Progressive 3-phase frame preloader:
-  // Phase 1: 17 Keyframes (<1.8MB) load first -> immediate 360° rotation in <500ms
-  // Phase 2: Interleaved frames (every 4th frame)
-  // Phase 3: Full 188 60fps frames in batches
+  // Progressive 3-phase frame preloader
   useEffect(() => {
     if (reducedMotion && !overrideReducedMotion) return;
 
@@ -206,10 +200,8 @@ export function ScrollFramesSection() {
       });
     };
 
-    // Phase 1 Keyframes (17 frames spaced evenly across 360°)
     const KEYFRAMES = [1, 12, 24, 36, 48, 60, 72, 84, 96, 108, 120, 132, 144, 156, 168, 180, 188];
 
-    // Phase 2: Interleaved (every 4th frame)
     const PHASE_2_FRAMES: number[] = [];
     for (let f = 4; f <= TOTAL_FRAMES; f += 4) {
       if (!KEYFRAMES.includes(f)) {
@@ -217,7 +209,6 @@ export function ScrollFramesSection() {
       }
     }
 
-    // Phase 3: Remaining frames
     const PHASE_3_FRAMES: number[] = [];
     for (let f = 1; f <= TOTAL_FRAMES; f++) {
       if (!KEYFRAMES.includes(f) && !PHASE_2_FRAMES.includes(f)) {
@@ -226,25 +217,21 @@ export function ScrollFramesSection() {
     }
 
     const executePreload = async () => {
-      // 1. Immediately fetch Frame 1 and draw
       await loadSingleFrame(1);
       if (isCancelled) return;
       renderFrame(1);
 
-      // 2. Load Phase 1 Keyframes concurrently (instant 360° coverage)
       await Promise.all(KEYFRAMES.map((f) => loadSingleFrame(f)));
       if (isCancelled) return;
       renderFrame(currentFrameRef.current);
       ScrollTrigger.refresh();
 
-      // 3. Load Phase 2 in small batches of 6
       for (let i = 0; i < PHASE_2_FRAMES.length; i += 6) {
         if (isCancelled) return;
         const batch = PHASE_2_FRAMES.slice(i, i + 6);
         await Promise.all(batch.map((f) => loadSingleFrame(f)));
       }
 
-      // 4. Load Phase 3 in small batches of 8
       for (let i = 0; i < PHASE_3_FRAMES.length; i += 8) {
         if (isCancelled) return;
         const batch = PHASE_3_FRAMES.slice(i, i + 8);
@@ -304,12 +291,11 @@ export function ScrollFramesSection() {
       pin: pinnedEl,
       pinSpacing: true,
       anticipatePin: 1,
-      scrub: isTouch ? 0.08 : 0.35, // Instant tactile response on mobile touch
+      scrub: isTouch ? 0.08 : 0.35,
       onUpdate: (self) => {
         const progress = self.progress;
         setScrollProgress(progress);
 
-        // Map progress [0, 1] to frame index [1, 188]
         const frameIndex = Math.min(
           Math.max(Math.round(progress * (TOTAL_FRAMES - 1)) + 1, 1),
           TOTAL_FRAMES
@@ -321,7 +307,6 @@ export function ScrollFramesSection() {
           renderFrame(frameIndex);
         }
 
-        // Active caption matching
         const matched = CAPTIONS.find(
           (c) => progress >= c.range[0] && progress <= c.range[1]
         );
@@ -329,13 +314,11 @@ export function ScrollFramesSection() {
       },
     });
 
-    // Native scroll listener to ensure ScrollTrigger updates on mobile touch inertia
     const handleNativeScroll = () => {
       ScrollTrigger.update();
     };
     window.addEventListener("scroll", handleNativeScroll, { passive: true });
 
-    // Refresh ScrollTrigger after layout settles
     const refreshTimer = setTimeout(() => {
       ScrollTrigger.refresh();
       renderFrame(currentFrameRef.current);
@@ -391,8 +374,8 @@ export function ScrollFramesSection() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-8 border-t border-white/[0.08]">
             {CAPTIONS.map((cap) => (
-              <div key={cap.id} className="space-y-3">
-                <span className="font-body text-[10px] uppercase tracking-[0.25em] text-accent-red">
+              <div key={cap.id} className="space-y-2 text-center sm:text-left">
+                <span className="font-body text-[10px] uppercase tracking-[0.25em] text-accent-red font-medium">
                   {cap.step}
                 </span>
                 <h3 className="font-headline text-xl text-white font-normal">
@@ -401,16 +384,6 @@ export function ScrollFramesSection() {
                 <p className="font-body text-xs text-white/70 leading-relaxed font-light">
                   {cap.description}
                 </p>
-                <div className="flex flex-wrap gap-2 pt-2">
-                  {cap.specs.map((spec) => (
-                    <span
-                      key={spec}
-                      className="text-[10px] uppercase tracking-[0.14em] px-2 py-0.5 rounded border border-white/15 text-white/60"
-                    >
-                      {spec}
-                    </span>
-                  ))}
-                </div>
               </div>
             ))}
           </div>
@@ -423,52 +396,53 @@ export function ScrollFramesSection() {
     <section
       ref={containerRef}
       aria-label="3D Footwear Rotation"
-      className="relative w-full h-[320vh] bg-[#070708] text-white border-b border-white/[0.08]"
+      className="relative w-full h-[320vh] bg-[#070708] text-white border-b border-white/[0.06]"
     >
       {/* Pinned Viewport Container (GSAP ScrollTrigger Pinned) */}
       <div
         ref={pinnedRef}
         className="w-full h-screen h-[100dvh] flex flex-col justify-between overflow-hidden bg-[#070708] relative"
       >
-        {/* Atmospheric Ambient Lighting */}
+        {/* Ambient Gallery Pedestal Lighting */}
         <div
           className="pointer-events-none absolute inset-0 z-0"
           aria-hidden="true"
         >
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[550px] bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.045)_0%,rgba(161,26,31,0.03)_40%,transparent_75%)] blur-3xl" />
-          <div className="absolute inset-y-0 left-0 w-16 sm:w-24 bg-gradient-to-r from-[#070708] to-transparent pointer-events-none z-10" />
-          <div className="absolute inset-y-0 right-0 w-16 sm:w-24 bg-gradient-to-l from-[#070708] to-transparent pointer-events-none z-10" />
+          {/* Subtle warm pedestal glow directly under the shoe */}
+          <div className="absolute top-[52%] left-1/2 -translate-x-1/2 -translate-y-1/2 w-[650px] sm:w-[900px] h-[350px] sm:h-[450px] bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.05)_0%,rgba(217,119,6,0.025)_40%,transparent_70%)] blur-2xl" />
+          <div className="absolute inset-y-0 left-0 w-16 sm:w-32 bg-gradient-to-r from-[#070708] to-transparent pointer-events-none z-10" />
+          <div className="absolute inset-y-0 right-0 w-16 sm:w-32 bg-gradient-to-l from-[#070708] to-transparent pointer-events-none z-10" />
         </div>
 
-        {/* Quiet Loading State: Sleek Badge */}
+        {/* Minimal Preload Pill (only until keyframes ready) */}
         {!allLoaded && (
-          <div className="absolute top-4 right-4 sm:top-6 sm:right-12 z-30 flex items-center gap-2 bg-white/[0.06] backdrop-blur-md border border-white/10 rounded-full px-2.5 sm:px-3 py-1 text-[9px] sm:text-[10px] uppercase tracking-[0.18em] text-white/70">
+          <div className="absolute top-4 right-4 sm:top-6 sm:right-12 z-30 flex items-center gap-2 bg-white/[0.04] border border-white/10 rounded-full px-2.5 py-1 text-[9px] uppercase tracking-[0.2em] text-white/60">
             <span className="h-1.5 w-1.5 rounded-full bg-accent-red animate-pulse" />
-            <span>3D Frames: {loadPercent}%</span>
+            <span>360° Cache: {loadPercent}%</span>
           </div>
         )}
 
-        {/* Top Header Information Bar */}
-        <header className="relative z-20 w-full px-4 sm:px-12 pt-4 sm:pt-8 flex items-center justify-between text-[10px] sm:text-[11px] uppercase tracking-[0.2em] sm:tracking-[0.25em] text-white/50 border-b border-white/[0.06] pb-3 sm:pb-4">
-          <div className="flex items-center gap-2 sm:gap-3">
+        {/* Minimal Slim Top Header */}
+        <header className="relative z-20 w-full px-5 sm:px-12 pt-5 sm:pt-7 flex items-center justify-between text-[10px] sm:text-[11px] uppercase tracking-[0.25em] text-white/40">
+          <div className="flex items-center gap-2.5">
             <span className="h-1.5 w-1.5 rounded-full bg-accent-red" />
-            <span className="text-white font-medium text-[11px] sm:text-xs">360° Deconstruction</span>
+            <span className="text-white/90 font-light tracking-[0.22em]">360° Studio Deconstruction</span>
           </div>
 
-          <div className="hidden sm:flex items-center gap-6 text-[10px] text-white/40">
-            <span>Scroll to rotate</span>
+          <div className="hidden md:flex items-center gap-6 text-[10px] text-white/35 tracking-[0.25em]">
+            <span>Scroll to Rotate</span>
             <span>•</span>
-            <span>1920 × 1080 Native Resolution</span>
+            <span>Handmade Boxcalf Silhouette</span>
           </div>
 
-          <div className="font-body text-[11px] sm:text-xs text-white/70 tracking-[0.15em] font-mono">
+          <div className="font-body text-[11px] text-white/60 tracking-[0.18em] font-mono">
             {String(currentFrameDisplay).padStart(3, "0")} / {TOTAL_FRAMES}
           </div>
         </header>
 
-        {/* Center Canvas Stage & Beside-the-Shoe Captions */}
-        <div className="relative z-10 flex-1 w-full flex items-center justify-center px-2 sm:px-8">
-          {/* Base Fallback Image for Instant Zero-Delay Appearance */}
+        {/* Center Stage: 100% Unobstructed Shoe Display */}
+        <div className="relative z-10 flex-1 w-full flex flex-col items-center justify-center px-4 sm:px-12">
+          {/* Base Fallback Image */}
           {!frameOneLoaded && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <Image
@@ -477,83 +451,70 @@ export function ScrollFramesSection() {
                 width={1920}
                 height={1080}
                 priority
-                className="max-h-[65vh] w-auto object-contain select-none opacity-50"
+                className="max-h-[64vh] w-auto object-contain select-none opacity-40"
               />
             </div>
           )}
 
-          {/* High-DPI Interactive Canvas */}
+          {/* High-DPI 3D Rotating Canvas */}
           <canvas
             ref={canvasRef}
             width={1920}
             height={1080}
-            className="w-full h-full max-h-[68vh] object-contain select-none pointer-events-none"
+            className="w-full h-full max-h-[64vh] sm:max-h-[68vh] object-contain select-none pointer-events-none"
           />
 
-          {/* Beside-the-Shoe Captions: Right on desktop, Compact Bottom Card on Mobile */}
-          <div className="pointer-events-none absolute inset-x-3 sm:inset-x-12 bottom-2 sm:bottom-auto sm:top-1/2 sm:-translate-y-1/2 flex justify-center sm:justify-end z-20">
-            <div className="w-full max-w-sm sm:max-w-sm">
-              {CAPTIONS.map((cap) => {
-                const isSelected = activeCaption?.id === cap.id;
-                return (
-                  <div
-                    key={cap.id}
-                    className={`transition-all duration-400 ease-out bg-[#0D0D10]/95 backdrop-blur-md border border-white/15 rounded-lg p-3.5 sm:p-6 shadow-2xl shadow-black/80 space-y-2 sm:space-y-3 ${
-                      isSelected
-                        ? "opacity-100 translate-y-0 pointer-events-auto block"
-                        : "opacity-0 translate-y-3 pointer-events-none hidden sm:block sm:absolute sm:inset-x-0"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between border-b border-white/[0.08] pb-1.5 sm:pb-2.5">
-                      <span className="font-body text-[9px] sm:text-[10px] uppercase tracking-[0.24em] text-accent-red font-medium">
-                        {cap.step}
-                      </span>
-                      <span className="text-[9px] sm:text-[10px] uppercase tracking-[0.16em] text-white/40">
-                        Atelier Focus
-                      </span>
-                    </div>
+          {/* Pure Editorial Caption (Zero bulky boxes - Pure Typography) */}
+          <div className="pointer-events-none absolute inset-x-6 sm:inset-x-12 bottom-2 sm:bottom-6 flex flex-col items-center text-center z-20">
+            {CAPTIONS.map((cap) => {
+              const isSelected = activeCaption?.id === cap.id;
+              return (
+                <div
+                  key={cap.id}
+                  className={`transition-all duration-500 ease-out max-w-xl mx-auto space-y-1 sm:space-y-1.5 ${
+                    isSelected
+                      ? "opacity-100 translate-y-0"
+                      : "opacity-0 translate-y-2 absolute pointer-events-none"
+                  }`}
+                >
+                  <span className="font-body text-[9px] sm:text-[10px] uppercase tracking-[0.32em] text-accent-red font-medium block">
+                    {cap.step}
+                  </span>
 
-                    <h3 className="font-headline text-base sm:text-2xl text-white font-normal tracking-[0.03em] leading-snug">
-                      {cap.title}
-                    </h3>
+                  <h3 className="font-headline text-xl sm:text-3xl text-white font-light tracking-[0.03em]">
+                    {cap.title}
+                  </h3>
 
-                    <p className="font-body text-[11px] sm:text-xs text-white/75 font-light leading-relaxed tracking-[0.02em] line-clamp-2 sm:line-clamp-none">
-                      {cap.description}
-                    </p>
+                  <p className="font-body text-[11px] sm:text-xs text-white/60 font-light leading-relaxed tracking-[0.02em] max-w-md mx-auto hidden sm:block">
+                    {cap.description}
+                  </p>
 
-                    <div className="flex flex-wrap gap-1.5 sm:gap-2 pt-0.5 sm:pt-1">
-                      {cap.specs.map((s) => (
-                        <span
-                          key={s}
-                          className="text-[8px] sm:text-[9px] uppercase tracking-[0.14em] px-1.5 sm:px-2 py-0.5 rounded border border-white/15 bg-white/[0.03] text-white/60"
-                        >
-                          {s}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  {/* Refined Specs String separated by elegant mid-dots */}
+                  <p className="font-body text-[10px] sm:text-[11px] text-white/45 uppercase tracking-[0.18em] pt-0.5">
+                    {cap.specs.join("  ·  ")}
+                  </p>
+                </div>
+              );
+            })}
           </div>
         </div>
 
-        {/* Bottom Progress Bar & Step Dots */}
-        <footer className="relative z-20 w-full px-4 sm:px-12 pb-3 sm:pb-6 flex items-center justify-between gap-3 border-t border-white/[0.06] pt-3">
+        {/* Minimal Bottom Bar: Step Dots & Progress Line */}
+        <footer className="relative z-20 w-full px-5 sm:px-12 pb-4 sm:pb-6 flex items-center justify-between gap-4 border-t border-white/[0.06] pt-3.5">
           {/* Step markers */}
-          <div className="flex items-center gap-3 sm:gap-6 text-[9px] sm:text-[10px] uppercase tracking-[0.18em] sm:tracking-[0.22em] text-white/50">
+          <div className="flex items-center gap-4 sm:gap-8 text-[9px] sm:text-[10px] uppercase tracking-[0.24em] text-white/45">
             {CAPTIONS.map((cap) => {
               const active = activeCaption?.id === cap.id;
               return (
                 <div
                   key={cap.id}
-                  className={`flex items-center gap-1.5 sm:gap-2 transition-colors duration-300 ${
-                    active ? "text-amber-300 font-medium" : "text-white/40"
+                  className={`flex items-center gap-2 transition-colors duration-300 ${
+                    active ? "text-white font-medium" : "text-white/30"
                   }`}
                 >
                   <span
                     className={`h-1.5 w-1.5 rounded-full transition-all duration-300 ${
-                      active ? "bg-amber-400 scale-125" : "bg-white/20"
+                      active ? "bg-accent-red scale-125" : "bg-white/20"
                     }`}
                   />
                   <span>{cap.id.toUpperCase()}</span>
@@ -562,9 +523,9 @@ export function ScrollFramesSection() {
             })}
           </div>
 
-          {/* Thin scroll line indicator */}
-          <div className="w-28 sm:w-64 flex items-center gap-2 sm:gap-3">
-            <div className="flex-1 h-[2px] bg-white/10 rounded-full overflow-hidden">
+          {/* Hairline rotation progress indicator */}
+          <div className="w-28 sm:w-48 flex items-center gap-3">
+            <div className="flex-1 h-[1.5px] bg-white/10 rounded-full overflow-hidden">
               <div
                 className="h-full bg-accent-red transition-all duration-75"
                 style={{ width: `${Math.round(scrollProgress * 100)}%` }}
@@ -575,8 +536,8 @@ export function ScrollFramesSection() {
             </span>
           </div>
 
-          <div className="hidden lg:block text-[10px] uppercase tracking-[0.2em] text-white/40">
-            {BRAND.name} Atelier Mumbai
+          <div className="hidden lg:block text-[10px] uppercase tracking-[0.24em] text-white/35">
+            Mumbai Atelier · Limited Batches
           </div>
         </footer>
       </div>

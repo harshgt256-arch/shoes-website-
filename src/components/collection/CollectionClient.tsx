@@ -24,6 +24,19 @@ const PRICE_TIERS: { label: string; value: PriceFilter }[] = [
   { label: "Above ₹32,000", value: "above-32k" },
 ];
 
+// Color mapping for leather swatches
+const getLeatherColor = (colour: string) => {
+  const c = colour.toLowerCase();
+  if (c.includes("black") || c.includes("noir")) return "#1c1c1e";
+  if (c.includes("oxblood") || c.includes("burgundy") || c.includes("cherry")) return "#6b2026";
+  if (c.includes("tan") || c.includes("cognac")) return "#a66838";
+  if (c.includes("espresso") || c.includes("brown") || c.includes("chocolate")) return "#3d2817";
+  if (c.includes("white") || c.includes("chalk") || c.includes("ivory")) return "#e8e6df";
+  if (c.includes("slate") || c.includes("grey") || c.includes("gray")) return "#58595b";
+  if (c.includes("navy") || c.includes("blue")) return "#1b2838";
+  return "#2c2c2e";
+};
+
 export function CollectionClient() {
   const [selectedCategory, setSelectedCategory] = useState<"All" | ShoeCategory>("All");
   const [selectedSort, setSelectedSort] = useState<SortOption>("featured");
@@ -302,20 +315,29 @@ export function CollectionClient() {
                     </div>
                   </div>
 
-                  {/* Name and Price Beneath */}
-                  <div className="pt-4 pb-1 space-y-1 text-left">
-                    <p className="font-body text-[10px] uppercase tracking-[0.2em] text-foreground-muted">
-                      {shoe.type} • {shoe.colour}
-                    </p>
-                    <h2 className="font-headline text-base sm:text-lg text-foreground font-normal tracking-[0.02em] group-hover:text-accent-red transition-colors">
+                  {/* Name, Leather Swatch, and Price */}
+                  <div className="pt-3.5 pb-1 space-y-1.5 text-left">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className="h-2 w-2 rounded-full border border-black/20 dark:border-white/20 shrink-0"
+                        style={{ backgroundColor: getLeatherColor(shoe.colour) }}
+                        aria-hidden="true"
+                      />
+                      <p className="font-body text-[10px] uppercase tracking-[0.22em] text-foreground-muted">
+                        {shoe.type} · {shoe.colour}
+                      </p>
+                    </div>
+
+                    <h2 className="font-headline text-base sm:text-lg text-foreground font-light tracking-[0.03em] group-hover:text-accent-red transition-colors">
                       {shoe.name}
                     </h2>
+
                     <div className="flex flex-wrap items-baseline justify-between gap-1 pt-0.5">
                       <span className="font-body text-xs sm:text-sm text-foreground font-medium tracking-[0.04em] break-words">
                         {formatINR(shoe.price)}
                       </span>
-                      <span className="text-[10px] text-foreground-muted uppercase tracking-[0.12em] shrink-0">
-                        Incl. GST
+                      <span className="text-[10px] text-foreground-muted uppercase tracking-[0.14em] shrink-0">
+                        {BRAND.commerce.gstInclusiveLabel}
                       </span>
                     </div>
                   </div>
